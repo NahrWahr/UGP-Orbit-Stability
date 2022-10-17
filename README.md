@@ -21,3 +21,13 @@ f(x) = r*x*(1 - (x/K)) # Population Dynamics, discrete system, x\_n+1 = f(x\_n)
 Cellular Automata, deterministic, discrete time and discrete phase space, dynamical system. 
 
 http://www.scholarpedia.org/article/Dynamical_system
+
+# Shortcomings
+ * The process of GALI calculation is stochastic, there isn't a way to do something akin to gradient descent with high reliability.
+ > But this can be abated by intially finding stable wells and then optimising it with calculation of lyapunov exponents
+ * Escape trajectories are considered the most stable trajectories, of no use however to us.
+ > This too is clearly resolve by discarding points in state space for which hamiltonian is positive.
+ * The integrator suffers from errors when the particle has a collsion with the object (The Hamiltonian becomes undefined at such points and raises an error)
+ * Symplectic integrators are far far slower, even typical range kutta integrators, although not strictly conserving energy, oscillate about the initial point.
+ * It takes ~ 1 second for trajectory stability calculation. As of now the calculation is limited to varying only two co-ordinates.
+
