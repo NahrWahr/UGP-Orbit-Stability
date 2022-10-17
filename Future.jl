@@ -4,7 +4,7 @@
 using Markdown
 using InteractiveUtils
 
-# ╔═╡ 89713ce0-486f-11ed-1f0a-eb9de6f9686a
+# ╔═╡ 52b44b30-b199-40c1-9417-7edc530a748c
 begin
 	using StaticArrays
 	using DynamicalSystems
@@ -17,7 +17,7 @@ begin
 	theme(:gruvbox_dark)
 end
 
-# ╔═╡ fe473333-9f0c-48e3-b95d-c27654468e03
+# ╔═╡ a5da330f-2f4b-49f1-bf17-10200446b68b
 begin
 	a = 0.250/2
 	b = 0.300/2
@@ -26,18 +26,18 @@ begin
 	load(download("https://upload.wikimedia.org/wikipedia/commons/thumb/4/41/Schematic_view_of_asteroid_%2825143%29_Itokawa.jpg/1280px-Schematic_view_of_asteroid_%2825143%29_Itokawa.jpg"))
 end
 
-# ╔═╡ e025cff7-e2ac-44fd-a51c-e21cca9a6a02
+# ╔═╡ 89a54c1f-0c01-4992-be23-5552fd8a0bdc
 load(download("https://upload.wikimedia.org/wikipedia/commons/4/4b/Itokawa.jpg"))
 
-# ╔═╡ 19f5d53a-c607-4196-994a-35a583432254
+# ╔═╡ 74cb58f6-2fd3-4564-8ce3-c202f6dad30b
 begin
 	function itokawa_plot()
 		X(r,theta,phi) = a*r * sin(theta) * sin(phi)
 		Y(r,theta,phi) = b*r * sin(theta) * cos(phi)
 		Z(r,theta,phi) = c*r * cos(theta)
 		
-		thetas = range(-pi, stop=pi,   length=50)
-		phis   = range(-pi, stop=pi/2, length=50)
+		thetas = range(-pi, stop=pi,   length=100)
+		phis   = range(-pi, stop=pi/2, length=100)
 		
 		xs = [X(1, theta, phi) for theta in thetas, phi in phis] 
 		ys = [Y(1, theta, phi) for theta in thetas, phi in phis]
@@ -49,19 +49,7 @@ begin
 	itokawa_plot()
 end
 
-# ╔═╡ 2bac64e6-3bf7-41f0-bd00-f6aa61d0b050
-md"""
-# Shortcomings
- * The process of GALI calculation is stochastic, there isn't a way to do something akin to gradient descent with high reliability.
- > But this can be abated by intially finding stable wells and then optimising it with calculation of lyapunov exponents
- * Escape trajectories are considered the most stable trajectories, of no use however to us.
- > This too is clearly resolve by discarding points in state space for which hamiltonian is positive.
- * The integrator suffers from errors when the particle has a collsion with the object (The Hamiltonian becomes undefined at such points and raises an error)
- * Symplectic integrators are far far slower, even typical range kutta integrators, although not strictly conserving energy, oscillate about the initial point.
- * It takes ~ 1 second for trajectory stability calculation. As of now the calculation is limited to varying only two co-ordinates.
-"""
-
-# ╔═╡ f12d65cd-047f-4c4c-9237-58b46ccfd827
+# ╔═╡ 0d7cdf0b-e9d7-4da1-92e4-e89abd34b8cf
 function H(u)
 	x = u[1:3]
 	p = u[4:6]
@@ -85,40 +73,17 @@ function H(u)
 	return Pot + KE
 end
 
-# ╔═╡ dda04799-85c4-4b8c-aaf0-3db46505c53d
+# ╔═╡ 7c319e1d-bc85-4621-9652-8fd1cb24f71b
 function dyneq(u, p, t)
 	I = [i==j ? 1 : 0 for i=1:3,j=1:3];O = [0 for i=1:3,j=1:3]
 	J = [O I; -I O]
-	
-	# function H(u)
-	# 	x = u[1:3]
-	# 	p = u[4:6]
-	# 	KE = 0.5*p'p;
-
-	# 	Pot = 0;
-	# 	μ = 1
-	# 	a = 0.1
-	# 	ϵ = 0.2
-	# 	R = 1e-20+√(+(@. x^2...));
-	# 	θ = acos(x[3]/R);
-	# 	Pot += -μ/R + (2*μ*a^2)/(5*R^3)*ϵ*(3*(x[3]/R)^2 - 2)/2
-
-	# 	Gc=1e-20;
-	# 	parc=[0,0.1,0.1];
-	# 	for i in eachindex(x[1:3])
-	# 		Gc+=(x[i]-parc[i])^2;
-	# 	end
-	# 	Pot += -√(1/Gc)
-		
-	# 	return Pot + KE
-	# end
 
 	dH(x) = ForwardDiff.gradient(H, x)
 
 	return SVector{6}(J * dH(u));
 end
 
-# ╔═╡ 8b1fd31b-6c83-49b7-b5a6-718af4443736
+# ╔═╡ eae49a62-5e12-42ee-b93e-f0a183796af8
 begin
 	xinit = SVector{6}([1, 0, 0, 0, 0.7, 0.7]/1.0)
 
@@ -136,161 +101,6 @@ begin
 	diffparameters = (alg = Vern7(), callback = cb)
 end
 
-# ╔═╡ 5ac29b5e-c4c6-4f27-adb3-8c6ece3d050e
-let ds = ContinuousDynamicalSystem(dyneq, xinit, [])
-
-	function chkem()
-		rx() = (rand() + 1)/2
-		ry() = (rand() - 0.5)/2
-		u = [rx() ry() 0 0 0 2];
-		return SVector{6}(u);
-	end
-
-	tint = tangent_integrator(ds, 6, alg = Vern7(), reltol = 1e-9, abstol = 1e-9, callback = cb)
-	N = 1000
-	xi = Array{Float64, 2}(undef, 3, N)
-	
-	for i = 1:N
-		
-		let x = chkem();
-			set_state!(tint, x)
-			xi[1:2,i] = x[1:2]
-			xi[3,i] = gali(tint, 1e3, 1, 1e-12; )[2][end]
-		end
-		
-	end
-	
-	begin
-		@show xi[:,findmax(xi[3,:])[2]]
-		@show xi[:,findmin(xi[3,:])[2]]
-		#scatter(xi[1,:], xi[2,:], marker_z=xi[3,:], ms=2)
-	end
-end
-
-# ╔═╡ 9493946e-97bd-48c2-baeb-a0272389b995
-let xinit = SVector{6}(
-	[0.7144149424146349, -0.2204810988865082, 0, 0, 0, 2]/1.0); 
-	
-	ds = ContinuousDynamicalSystem(dyneq, xinit,[])
-	tr=trajectory(ds, 1000.0, Δt=0.1; diffeq = diffparameters)
-	Trajectory = itokawa_plot()
-	Trajectory = plot!(tr[:,1],tr[:,2],tr[:,3], lw = 0.3)
-end
-
-# ╔═╡ 5db39d3a-4f38-4d5f-b40a-8de3e103ff7f
-let xinit = SVector{6}(
-	[0.5501392452852918, 0.22914578275154585, 0, 0, 0, 2]/1.0); 
-	
-	ds = ContinuousDynamicalSystem(dyneq, xinit,[])
-	tr=trajectory(ds, 1000.0, Δt=0.1; diffeq = diffparameters)
-	Trajectory = itokawa_plot()
-	Trajectory = plot!(tr[:,1],tr[:,2],tr[:,3], lw = 0.1)
-end
-
-# ╔═╡ a18d3aed-a870-4b3a-a00e-c01e000e2655
-let xinit = SVector{6}(
-	[0.5099442983254394, -0.24316741235591965, 0, 0, 0, 2]/1.0);
-	
-	ds = ContinuousDynamicalSystem(dyneq, xinit, [])
-	pint = poincaremap(ds, (3,0.0))
-	dt = 1000
-	tr = Vector(undef, dt)
-	time = Vector(undef, dt)
-	for i=1:dt
-		step!(pint)
-		tr[i] = get_state(pint)
-		time[i] = current_time(pint)
-	end
-	ω = (time[end]-time[begin])/length(time)
-	println("ω=" , ω);
-	tr=hcat(Vector.(tr)...)
-	poincare = scatter(tr[1,:],tr[2,:],title="Poincare",ms=0.4)
-
-	sint = stroboscopicmap(ds, ω)
-
-	dt = 1000
-	tr = Vector(undef, dt)
-	for i=1:dt
-		step!(sint)
-		tr[i] = get_state(sint)
-	end
-	tr=hcat(Vector.(tr)...)
-	strobo = plot(tr[1,:],tr[2,:],tr[3,:],title="Stroboscopic")
-
-	plot(poincare,strobo)
-end
-
-# ╔═╡ a434ef7e-ff11-4752-a688-43f552f4af39
-let ds = ContinuousDynamicalSystem(dyneq, xinit, [])
-	function chkem()
-		rx() = (rand())/1
-		rv() = (2*rand())/1
-		u = [rx() rx() rx() rv() rv() rv()]
-		while(H(u) > -0.5 || u[1:3]'u[4:6]>0.4)
-			u = [rx() rx() rx() rv() rv() rv()]
-		end
-		return SVector{6}(u);
-	end
-
-	tint = tangent_integrator(ds, 5, alg = Vern7(), reltol = 1e-9, abstol = 1e-9, callback = cb)
-	N = 10000
-	xi = Array{Float64, 2}(undef, 7, N)
-	
-	for i = 1:N
-		
-		let x = chkem();
-			set_state!(tint, x)
-			xi[1:6,i] = x
-			xi[7,i] = gali(tint, 1e3, 1, 1e-10; )[2][end]
-		end
-		
-	end
-	
-	begin
-		@show [xi[:,findmax(xi[7,:])[2]],xi[:,findmin(xi[7,:])[2]]]
-	end
-end
-
-# ╔═╡ 2b953c98-6628-4b92-8a8e-488766cab297
-let xinit = SVector{6}(
-	[0.6252729500329739, 0.5225822689335774, 0.505809571362541, 0.010940098161554834, 1.7396635952651789, 0.0077371226204532295]); 
-	
-	ds = ContinuousDynamicalSystem(dyneq, xinit,[])
-	tr=trajectory(ds, 1000.0, Δt=0.1; diffeq = diffparameters)
-	Trajectory = plot(tr[:,1],tr[:,2],tr[:,3])
-end
-
-# ╔═╡ 6bed7b23-9fbe-4543-9119-e8fc00d5ac1d
-let xinit = SVector{6}(
-	[0.1344112060194923, 0.1450660697147752, 0.7884547833903157, 1.4531077725260015, 0.41912798661059747, 0.11892762900464526]);
-	
-	p = ODEProblem(dyneq, xinit, (0,1000))
-	
-	collision(u,t,integrator) = begin
-		x = u[1:3];
-		x = map(e->e^2, x);
-        return √(reduce(+, x)) < 0.3;
-	end
-	
-	cb = DiscreteCallback(collision, terminate!)
-	diffp = (alg = Vern7(), reltol = 1e-9, abstol = 1e-9, callback = cb)
-	tr = solve(p, Vern7(), alg = Vern7(), reltol = 1e-9, abstol = 1e-9, callback = cb)
-	tr = permutedims(hcat(Vector.(tr.u)...))
-	Trajectory = plot(tr[:,1],tr[:,2],tr[:,3])
-end
-
-# ╔═╡ c82ce0cd-cce6-4143-bb7d-bdc8b1167004
-# ╠═╡ disabled = true
-#=╠═╡
-let	Δt = 1.0
-	diffeq = (abstol=1e-9, retol=1e-9, alg = Vern9(), maxiters = typemax(Int))
-	sp = [0, .295456, .407308431, 0] # stable periodic orbit: 1D torus
-	qp = [0, .483000, .278980390, 0] # quasiperiodic orbit: 2D torus
-	ch = [0, -0.25, 0.42081, 0]      # chaotic orbit
-	ds = Systems.henonheiles(sp)
-end
-  ╠═╡ =#
-
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
 [deps]
@@ -307,7 +117,7 @@ DiffEqCallbacks = "~2.24.2"
 DynamicalSystems = "~2.3.0"
 ForwardDiff = "~0.10.32"
 Images = "~0.25.2"
-OrdinaryDiffEq = "~6.28.1"
+OrdinaryDiffEq = "~6.29.1"
 Plots = "~1.35.3"
 StaticArrays = "~1.5.9"
 """
@@ -911,6 +721,12 @@ git-tree-sha1 = "9b02998aba7bf074d14de89f9d37ca24a1a0b046"
 uuid = "78b55507-aeef-58d4-861c-77aaff3498b1"
 version = "0.21.0+0"
 
+[[deps.Ghostscript_jll]]
+deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
+git-tree-sha1 = "78e2c69783c9753a91cdae88a8d432be85a2ab5e"
+uuid = "61579ee1-b43e-5ca0-a5da-69d92c66a64b"
+version = "9.55.0+0"
+
 [[deps.Glib_jll]]
 deps = ["Artifacts", "Gettext_jll", "JLLWrappers", "Libdl", "Libffi_jll", "Libiconv_jll", "Libmount_jll", "PCRE2_jll", "Pkg", "Zlib_jll"]
 git-tree-sha1 = "fb83fbe02fe57f2c068013aa94bcdf6760d3a7a7"
@@ -1012,16 +828,16 @@ uuid = "82e4d734-157c-48bb-816b-45c225c6df19"
 version = "0.6.6"
 
 [[deps.ImageMagick]]
-deps = ["FileIO", "ImageCore", "ImageMagick_jll", "InteractiveUtils"]
-git-tree-sha1 = "ca8d917903e7a1126b6583a097c5cb7a0bedeac1"
+deps = ["FileIO", "ImageCore", "ImageMagick_jll", "InteractiveUtils", "Libdl", "Pkg", "Random"]
+git-tree-sha1 = "5bc1cb62e0c5f1005868358db0692c994c3a13c6"
 uuid = "6218d12a-5da1-5696-b52f-db25d2ecc6d1"
-version = "1.2.2"
+version = "1.2.1"
 
 [[deps.ImageMagick_jll]]
-deps = ["JpegTurbo_jll", "Libdl", "Libtiff_jll", "Pkg", "Zlib_jll", "libpng_jll"]
-git-tree-sha1 = "1c0a2295cca535fabaf2029062912591e9b61987"
+deps = ["Artifacts", "Ghostscript_jll", "JLLWrappers", "JpegTurbo_jll", "Libdl", "Libtiff_jll", "Pkg", "Zlib_jll", "libpng_jll"]
+git-tree-sha1 = "124626988534986113cfd876e3093e4a03890f58"
 uuid = "c73af94c-d91f-53ed-93a7-00f77d67a9d7"
-version = "6.9.10-12+3"
+version = "6.9.12+3"
 
 [[deps.ImageMetadata]]
 deps = ["AxisArrays", "ImageAxes", "ImageBase", "ImageCore"]
@@ -1342,9 +1158,9 @@ uuid = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 
 [[deps.LinearSolve]]
 deps = ["ArrayInterfaceCore", "DocStringExtensions", "FastLapackInterface", "GPUArraysCore", "IterativeSolvers", "KLU", "Krylov", "KrylovKit", "LinearAlgebra", "RecursiveFactorization", "Reexport", "SciMLBase", "Setfield", "SnoopPrecompile", "SparseArrays", "SuiteSparse", "UnPack"]
-git-tree-sha1 = "d1a5a61fa3728fcf63c5798458bce6ec57129065"
+git-tree-sha1 = "70db49cbaec1cdf4def39c4ac51a3abe56b2e421"
 uuid = "7ed4a6bd-45f5-4d41-b270-4a48e9bafcae"
-version = "1.26.1"
+version = "1.27.0"
 
 [[deps.LogExpFunctions]]
 deps = ["ChainRulesCore", "ChangesOfVariables", "DocStringExtensions", "InverseFunctions", "IrrationalConstants", "LinearAlgebra"]
@@ -1574,10 +1390,10 @@ uuid = "bac558e1-5e72-5ebc-8fee-abe8a469f55d"
 version = "1.4.1"
 
 [[deps.OrdinaryDiffEq]]
-deps = ["Adapt", "ArrayInterface", "ArrayInterfaceGPUArrays", "ArrayInterfaceStaticArrays", "DataStructures", "DiffEqBase", "DocStringExtensions", "ExponentialUtilities", "FastBroadcast", "FastClosures", "FiniteDiff", "ForwardDiff", "FunctionWrappersWrappers", "LinearAlgebra", "LinearSolve", "Logging", "LoopVectorization", "MacroTools", "MuladdMacro", "NLsolve", "NonlinearSolve", "Polyester", "PreallocationTools", "Preferences", "RecursiveArrayTools", "Reexport", "SciMLBase", "SnoopPrecompile", "SparseArrays", "SparseDiffTools", "StaticArrays", "UnPack"]
-git-tree-sha1 = "33a819c1355faeccc68d57a3c7d7c871680d49f2"
+deps = ["Adapt", "ArrayInterface", "ArrayInterfaceCore", "ArrayInterfaceGPUArrays", "ArrayInterfaceStaticArrays", "ArrayInterfaceStaticArraysCore", "DataStructures", "DiffEqBase", "DocStringExtensions", "ExponentialUtilities", "FastBroadcast", "FastClosures", "FiniteDiff", "ForwardDiff", "FunctionWrappersWrappers", "LinearAlgebra", "LinearSolve", "Logging", "LoopVectorization", "MacroTools", "MuladdMacro", "NLsolve", "NonlinearSolve", "Polyester", "PreallocationTools", "Preferences", "RecursiveArrayTools", "Reexport", "SciMLBase", "SnoopPrecompile", "SparseArrays", "SparseDiffTools", "StaticArrays", "UnPack"]
+git-tree-sha1 = "1e889a553289f9a291dfb450383e5bc4531c309b"
 uuid = "1dea7af3-3e70-54e6-95c3-0bf5283fa5ed"
-version = "6.28.1"
+version = "6.29.1"
 
 [[deps.PCRE2_jll]]
 deps = ["Artifacts", "Libdl"]
@@ -2378,21 +2194,12 @@ version = "1.4.1+0"
 """
 
 # ╔═╡ Cell order:
-# ╠═89713ce0-486f-11ed-1f0a-eb9de6f9686a
-# ╠═fe473333-9f0c-48e3-b95d-c27654468e03
-# ╟─e025cff7-e2ac-44fd-a51c-e21cca9a6a02
-# ╠═19f5d53a-c607-4196-994a-35a583432254
-# ╟─2bac64e6-3bf7-41f0-bd00-f6aa61d0b050
-# ╠═f12d65cd-047f-4c4c-9237-58b46ccfd827
-# ╠═dda04799-85c4-4b8c-aaf0-3db46505c53d
-# ╠═8b1fd31b-6c83-49b7-b5a6-718af4443736
-# ╠═5ac29b5e-c4c6-4f27-adb3-8c6ece3d050e
-# ╠═9493946e-97bd-48c2-baeb-a0272389b995
-# ╠═5db39d3a-4f38-4d5f-b40a-8de3e103ff7f
-# ╠═a18d3aed-a870-4b3a-a00e-c01e000e2655
-# ╠═a434ef7e-ff11-4752-a688-43f552f4af39
-# ╠═2b953c98-6628-4b92-8a8e-488766cab297
-# ╠═6bed7b23-9fbe-4543-9119-e8fc00d5ac1d
-# ╠═c82ce0cd-cce6-4143-bb7d-bdc8b1167004
+# ╠═52b44b30-b199-40c1-9417-7edc530a748c
+# ╠═a5da330f-2f4b-49f1-bf17-10200446b68b
+# ╠═89a54c1f-0c01-4992-be23-5552fd8a0bdc
+# ╠═74cb58f6-2fd3-4564-8ce3-c202f6dad30b
+# ╠═0d7cdf0b-e9d7-4da1-92e4-e89abd34b8cf
+# ╠═7c319e1d-bc85-4621-9652-8fd1cb24f71b
+# ╠═eae49a62-5e12-42ee-b93e-f0a183796af8
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002
