@@ -36,8 +36,8 @@ begin
 		Y(r,theta,phi) = b*r * sin(theta) * cos(phi)
 		Z(r,theta,phi) = c*r * cos(theta)
 		
-		thetas = range(-pi, stop=pi,   length=100)
-		phis   = range(-pi, stop=pi/2, length=100)
+		thetas = range(-pi, stop=pi,   length=50)
+		phis   = range(-pi, stop=pi/2, length=50)
 		
 		xs = [X(1, theta, phi) for theta in thetas, phi in phis] 
 		ys = [Y(1, theta, phi) for theta in thetas, phi in phis]
@@ -47,6 +47,15 @@ begin
 		return p;
 	end
 	itokawa_plot()
+end
+
+# ╔═╡ 0c78d9f4-9288-4465-b35f-8f388a30dc32
+function norm(x)
+	res = 0.0
+	@inbounds for v in x
+	  	res += v*v
+	end
+	return sqrt(res)
 end
 
 # ╔═╡ 0d7cdf0b-e9d7-4da1-92e4-e89abd34b8cf
@@ -59,7 +68,7 @@ function H(u)
 	μ = 1
 	a = 0.125
 	ϵ = 0.55
-	R = 1e-10+√(+(@. x^2...));
+	R = 1e-10+norm(x);
 	θ = acos(x[3]/R);
 	Pot += -μ/R + (2*μ*a^2)/(5*R^3)*ϵ*(3*(x[3]/R)^2 - 2)/2
 
@@ -88,17 +97,74 @@ begin
 	xinit = SVector{6}([1, 0, 0, 0, 0.7, 0.7]/1.0)
 
 	collision(u,t,integrator) = begin # specifying the brellouin sphere
-		x = u[1];
-		y = u[2];
-		z = u[3];
-		return (x < a || y < b || z < c)
+		x = abs(u[1]);
+		y = abs(u[2]);
+		z = abs(u[3]);
+		return (x < 1.5a && 1.5y < b && 1.5z < c)
 		
 		#x = map(e->e^2, x);
         #return reduce(+, x) < 0.1;
 	end
 	cb = DiscreteCallback(collision,terminate!)
 
-	diffparameters = (alg = Vern7(), callback = cb)
+	diffparameters = (alg = Vern7(), reltol = 1e-9, abstol = 1e-9, callback = cb)
+end
+
+# ╔═╡ 05e4b325-8d12-4d28-8cb0-c44997bf3ab1
+function chkem()
+	rx() = (2*rand())/1
+	rv() = (2*rand())/1
+	u = [rx() rx() rx() rv() rv() rv()]
+	while(H(u) > -0.5 || norm(u[1:3])<0.8 || norm(u[1:3])>1.2 || norm(u[4:6])<0.8 || norm(u[4:6])>1.2)
+		u = [rx() rx() rx() rv() rv() rv()]
+	end
+	return SVector{6}(u);
+end
+
+# ╔═╡ 90b14119-b823-4360-bd48-4b55952bb3d1
+let ds = ContinuousDynamicalSystem(dyneq, xinit, [])
+
+	I = [i==j ? 1 : 0 for i=1:6,j=1:6]
+	threshold = 1e-12;
+	tmax = 1e3;
+	tint = tangent_integrator(ds, I, diffeq = diffparameters)
+	N = 100
+	xi = Array{Float64, 2}(undef, 7, N)
+	
+	for i = 1:N
+		collision = true;
+		while(collision)
+			let x = chkem();
+				xi[1:6,i] = x
+				reinit!(tint, [x';I]')
+				ts = gali(tint, tmax, 1, threshold)
+				
+				if(ts[1][end] > threshold && ts[2][end] < tmax)
+					collision = true;
+				else
+					collision = false;
+				end
+				
+				xi[7,i] = ts[2][end]
+			end
+		end
+	end
+	
+	begin
+		@show (xi[:,findmax(xi[7,:])[2]],xi[:,findmin(xi[7,:])[2]])
+	end
+end
+
+# ╔═╡ 3e27a994-e8d5-476f-9006-3083a42f2bf8
+let xinit = SVector{6}(
+	[2.041544042994964, 0.008050267998024404, 0.010424992038013375, -0.005416447034586245, 0.6615664289227896, 0.6649445444980833]);
+	
+	p = ODEProblem(dyneq, xinit, (0,1000))
+	
+	tr = solve(p, Vern7(), alg = Vern7(), reltol = 1e-9, abstol = 1e-9, callback = cb)
+	tr = permutedims(hcat(Vector.(tr.u)...))
+	Trajectory = itokawa_plot()
+	Trajectory = plot!(tr[:,1],tr[:,2],tr[:,3],lw = 0.3)
 end
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001
@@ -2196,10 +2262,14 @@ version = "1.4.1+0"
 # ╔═╡ Cell order:
 # ╠═52b44b30-b199-40c1-9417-7edc530a748c
 # ╠═a5da330f-2f4b-49f1-bf17-10200446b68b
-# ╠═89a54c1f-0c01-4992-be23-5552fd8a0bdc
+# ╟─89a54c1f-0c01-4992-be23-5552fd8a0bdc
 # ╠═74cb58f6-2fd3-4564-8ce3-c202f6dad30b
+# ╠═0c78d9f4-9288-4465-b35f-8f388a30dc32
 # ╠═0d7cdf0b-e9d7-4da1-92e4-e89abd34b8cf
 # ╠═7c319e1d-bc85-4621-9652-8fd1cb24f71b
 # ╠═eae49a62-5e12-42ee-b93e-f0a183796af8
+# ╠═05e4b325-8d12-4d28-8cb0-c44997bf3ab1
+# ╠═90b14119-b823-4360-bd48-4b55952bb3d1
+# ╠═3e27a994-e8d5-476f-9006-3083a42f2bf8
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002
